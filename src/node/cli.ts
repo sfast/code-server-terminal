@@ -750,10 +750,10 @@ export async function readSocketPath(path: string): Promise<string | undefined> 
  */
 export const shouldOpenInExistingInstance = async (args: UserProvidedArgs): Promise<string | undefined> => {
   // Always use the existing instance if we're running from VS Code's terminal.
-  if (process.env.VSCODE_IPC_HOOK_CLI) {
-    logger.debug("Found VSCODE_IPC_HOOK_CLI")
-    return process.env.VSCODE_IPC_HOOK_CLI
-  }
+  // if (process.env.VSCODE_IPC_HOOK_CLI) {
+  //   logger.debug("Found VSCODE_IPC_HOOK_CLI")
+  //   return process.env.VSCODE_IPC_HOOK_CLI
+  // }
 
   // If these flags are set then assume the user is trying to open in an
   // existing instance since these flags have no effect otherwise.

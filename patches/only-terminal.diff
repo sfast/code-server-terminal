@@ -1,0 +1,296 @@
+Index: code-server/lib/vscode/src/vs/base/browser/ui/actionbar/actionbar.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/base/browser/ui/actionbar/actionbar.ts
++++ code-server/lib/vscode/src/vs/base/browser/ui/actionbar/actionbar.ts
+@@ -372,6 +372,11 @@ export class ActionBar extends Disposabl
+ 				item.setFocusable(true);
+ 			}
+ 
++			// @ts-ignore
++			if (item?.label?.className?.includes('trash')) {
++				return;
++			}
++
+ 			if (index === null || index < 0 || index >= this.actionsList.children.length) {
+ 				this.actionsList.appendChild(actionViewItemElement);
+ 				this.viewItems.push(item);
+Index: code-server/lib/vscode/src/vs/workbench/browser/layout.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/browser/layout.ts
++++ code-server/lib/vscode/src/vs/workbench/browser/layout.ts
+@@ -2525,6 +2525,10 @@ class LayoutStateModel extends Disposabl
+ 			}
+ 		}
+ 
++		if (key.name.includes('hidden')) {
++			return !(key.name === 'panel.hidden') as T;
++		}
++
+ 		return this.stateCache.get(key.name) as T;
+ 	}
+ 
+Index: code-server/lib/vscode/src/vs/workbench/browser/parts/compositeBar.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/browser/parts/compositeBar.ts
++++ code-server/lib/vscode/src/vs/workbench/browser/parts/compositeBar.ts
+@@ -332,9 +332,11 @@ export class CompositeBar extends Widget
+ 	}
+ 
+ 	addComposite({ id, name, order, requestedIndex }: { id: string; name: string; order?: number; requestedIndex?: number }): void {
+-		if (this.model.add(id, name, order, requestedIndex)) {
+-			this.computeSizes([this.model.findItem(id)]);
+-			this.updateCompositeSwitcher();
++		if (name === 'Terminal') {
++			if (this.model.add(id, name, order, requestedIndex)) {
++				this.computeSizes([this.model.findItem(id)]);
++				this.updateCompositeSwitcher();
++			}
+ 		}
+ 	}
+ 
+Index: code-server/lib/vscode/src/vs/workbench/browser/parts/panel/panelPart.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/browser/parts/panel/panelPart.ts
++++ code-server/lib/vscode/src/vs/workbench/browser/parts/panel/panelPart.ts
+@@ -6,7 +6,7 @@
+ import 'vs/css!./media/basepanelpart';
+ import 'vs/css!./media/panelpart';
+ import { localize } from 'vs/nls';
+-import { IAction, Separator, SubmenuAction, toAction } from 'vs/base/common/actions';
++import { IAction, toAction } from 'vs/base/common/actions';
+ import { Event } from 'vs/base/common/event';
+ import { Registry } from 'vs/platform/registry/common/platform';
+ import { ActionsOrientation, prepareActions } from 'vs/base/browser/ui/actionbar/actionbar';
+@@ -18,7 +18,7 @@ import { IContextMenuService } from 'vs/
+ import { ITelemetryService } from 'vs/platform/telemetry/common/telemetry';
+ import { IKeybindingService } from 'vs/platform/keybinding/common/keybinding';
+ import { IInstantiationService } from 'vs/platform/instantiation/common/instantiation';
+-import { PanelActivityAction, TogglePanelAction, PlaceHolderPanelActivityAction, PlaceHolderToggleCompositePinnedAction } from 'vs/workbench/browser/parts/panel/panelActions';
++import { PanelActivityAction, PlaceHolderPanelActivityAction, PlaceHolderToggleCompositePinnedAction } from 'vs/workbench/browser/parts/panel/panelActions';
+ import { IThemeService } from 'vs/platform/theme/common/themeService';
+ import { ThemeIcon } from 'vs/base/common/themables';
+ import { PANEL_BACKGROUND, PANEL_BORDER, PANEL_ACTIVE_TITLE_FOREGROUND, PANEL_INACTIVE_TITLE_FOREGROUND, PANEL_ACTIVE_TITLE_BORDER, EDITOR_DRAG_AND_DROP_BACKGROUND, PANEL_DRAG_AND_DROP_BORDER } from 'vs/workbench/common/theme';
+@@ -27,7 +27,7 @@ import { CompositeBar, ICompositeBarItem
+ import { IActivityHoverOptions, ToggleCompositeBadgeAction, ToggleCompositePinnedAction } from 'vs/workbench/browser/parts/compositeBarActions';
+ import { IBadge } from 'vs/workbench/services/activity/common/activity';
+ import { INotificationService } from 'vs/platform/notification/common/notification';
+-import { Dimension, trackFocus, EventHelper, $, asCSSUrl, createCSSRule } from 'vs/base/browser/dom';
++import { Dimension, trackFocus, EventHelper, asCSSUrl, createCSSRule } from 'vs/base/browser/dom';
+ import { IDisposable, DisposableStore } from 'vs/base/common/lifecycle';
+ import { IContextKey, IContextKeyService, ContextKeyExpr } from 'vs/platform/contextkey/common/contextkey';
+ import { isUndefinedOrNull, assertIsDefined } from 'vs/base/common/types';
+@@ -46,7 +46,6 @@ import { IPartOptions } from 'vs/workben
+ import { StringSHA1 } from 'vs/base/common/hash';
+ import { URI } from 'vs/base/common/uri';
+ import { ToolBar } from 'vs/base/browser/ui/toolbar/toolbar';
+-import { ICommandService } from 'vs/platform/commands/common/commands';
+ import { PlaceHolderToggleCompositeBadgeAction } from 'vs/workbench/browser/parts/activitybar/activitybarActions';
+ import { createAndFillInContextMenuActions } from 'vs/platform/actions/browser/menuEntryActionViewItem';
+ 
+@@ -544,19 +543,25 @@ export abstract class BasePanelPart exte
+ 
+ 	protected override  createTitleArea(parent: HTMLElement): HTMLElement {
+ 		const element = super.createTitleArea(parent);
+-		const globalTitleActionsContainer = element.appendChild($('.global-actions'));
++		// const globalTitleActionsContainer = element.appendChild($('.global-actions'));
+ 
+ 		// Global Actions Toolbar
+-		this.globalToolBar = this._register(new ToolBar(globalTitleActionsContainer, this.contextMenuService, {
+-			actionViewItemProvider: action => this.actionViewItemProvider(action),
+-			orientation: ActionsOrientation.HORIZONTAL,
+-			getKeyBinding: action => this.keybindingService.lookupKeybinding(action.id),
+-			anchorAlignmentProvider: () => this.getTitleAreaDropDownAnchorAlignment(),
+-			toggleMenuTitle: localize('moreActions', "More Actions...")
+-		}));
+-
+-		this.updateGlobalToolbarActions();
+-
++		// this.globalToolBar = this._register(new ToolBar(globalTitleActionsContainer, this.contextMenuService, {
++		// 	actionViewItemProvider: action => this.actionViewItemProvider(action),
++		// 	orientation: ActionsOrientation.HORIZONTAL,
++		// 	getKeyBinding: action => this.keybindingService.lookupKeybinding(action.id),
++		// 	anchorAlignmentProvider: () => this.getTitleAreaDropDownAnchorAlignment(),
++		// 	toggleMenuTitle: localize('moreActions', "More Actions...")
++		// }));
++
++		// this.updateGlobalToolbarActions();
++
++		setTimeout(() => {
++			const monacoSashes = document.querySelectorAll('.monaco-sash');
++			[...monacoSashes].map((sash: any) => {
++				sash.parentNode.removeChild(sash);
++			});
++		}, 100);
+ 		return element;
+ 	}
+ 
+@@ -925,7 +930,6 @@ export class PanelPart extends BasePanel
+ 		@IViewDescriptorService viewDescriptorService: IViewDescriptorService,
+ 		@IContextKeyService contextKeyService: IContextKeyService,
+ 		@IExtensionService extensionService: IExtensionService,
+-		@ICommandService private commandService: ICommandService,
+ 		@IMenuService private menuService: IMenuService,
+ 	) {
+ 		super(
+@@ -987,12 +991,12 @@ export class PanelPart extends BasePanel
+ 		panelAlignMenu.dispose();
+ 		panelPositionMenu.dispose();
+ 
+-		actions.push(...[
+-			new Separator(),
+-			new SubmenuAction('workbench.action.panel.position', localize('panel position', "Panel Position"), positionActions),
+-			new SubmenuAction('workbench.action.panel.align', localize('align panel', "Align Panel"), alignActions),
+-			toAction({ id: TogglePanelAction.ID, label: localize('hidePanel', "Hide Panel"), run: () => this.commandService.executeCommand(TogglePanelAction.ID) })
+-		]);
++		// actions.push(...[
++		// 	new Separator(),
++		// 	new SubmenuAction('workbench.action.panel.position', localize('panel position', "Panel Position"), positionActions),
++		// 	new SubmenuAction('workbench.action.panel.align', localize('align panel', "Align Panel"), alignActions),
++		// 	toAction({ id: TogglePanelAction.ID, label: localize('hidePanel', "Hide Panel"), run: () => this.commandService.executeCommand(TogglePanelAction.ID) })
++		// ]);
+ 	}
+ 
+ 	override layout(width: number, height: number, top: number, left: number): void {
+Index: code-server/lib/vscode/src/vs/workbench/contrib/terminal/browser/terminalMenus.ts
+===================================================================
+--- code-server.orig/lib/vscode/src/vs/workbench/contrib/terminal/browser/terminalMenus.ts
++++ code-server/lib/vscode/src/vs/workbench/contrib/terminal/browser/terminalMenus.ts
+@@ -11,7 +11,6 @@ import { IMenu, MenuId, MenuRegistry } f
+ import { ContextKeyExpr } from 'vs/platform/contextkey/common/contextkey';
+ import { IExtensionTerminalProfile, ITerminalProfile, TerminalLocation, TerminalSettingId } from 'vs/platform/terminal/common/terminal';
+ import { ResourceContextKey } from 'vs/workbench/common/contextkeys';
+-import { TaskExecutionSupportedContext } from 'vs/workbench/contrib/tasks/common/taskService';
+ import { ICreateTerminalOptions, ITerminalLocationOptions, ITerminalService } from 'vs/workbench/contrib/terminal/browser/terminal';
+ import { TerminalCommandId, TERMINAL_VIEW_ID } from 'vs/workbench/contrib/terminal/common/terminal';
+ import { TerminalContextKeys, TerminalContextKeyStrings } from 'vs/workbench/contrib/terminal/common/terminalContextKey';
+@@ -334,40 +333,40 @@ export function setupTerminalMenus(): vo
+ 					group: '3_configure'
+ 				}
+ 			},
+-			{
+-				id: MenuId.TerminalNewDropdownContext,
+-				item: {
+-					command: {
+-						id: TerminalCommandId.ConfigureTerminalSettings,
+-						title: localize('workbench.action.terminal.openSettings', "Configure Terminal Settings")
+-					},
+-					group: '3_configure'
+-				}
+-			},
+-			{
+-				id: MenuId.TerminalNewDropdownContext,
+-				item: {
+-					command: {
+-						id: 'workbench.action.tasks.runTask',
+-						title: localize('workbench.action.tasks.runTask', "Run Task...")
+-					},
+-					when: TaskExecutionSupportedContext,
+-					group: '4_tasks',
+-					order: 1
+-				},
+-			},
+-			{
+-				id: MenuId.TerminalNewDropdownContext,
+-				item: {
+-					command: {
+-						id: 'workbench.action.tasks.configureTaskRunner',
+-						title: localize('workbench.action.tasks.configureTaskRunner', "Configure Tasks...")
+-					},
+-					when: TaskExecutionSupportedContext,
+-					group: '4_tasks',
+-					order: 2
+-				},
+-			}
++			// {
++			// 	id: MenuId.TerminalNewDropdownContext,
++			// 	item: {
++			// 		command: {
++			// 			id: TerminalCommandId.ConfigureTerminalSettings,
++			// 			title: localize('workbench.action.terminal.openSettings', "Configure Terminal Settings")
++			// 		},
++			// 		group: '3_configure'
++			// 	}
++			// },
++			// {
++			// 	id: MenuId.TerminalNewDropdownContext,
++			// 	item: {
++			// 		command: {
++			// 			id: 'workbench.action.tasks.runTask',
++			// 			title: localize('workbench.action.tasks.runTask', "Run Task...")
++			// 		},
++			// 		when: TaskExecutionSupportedContext,
++			// 		group: '4_tasks',
++			// 		order: 1
++			// 	},
++			// },
++			// {
++			// 	id: MenuId.TerminalNewDropdownContext,
++			// 	item: {
++			// 		command: {
++			// 			id: 'workbench.action.tasks.configureTaskRunner',
++			// 			title: localize('workbench.action.tasks.configureTaskRunner', "Configure Tasks...")
++			// 		},
++			// 		when: TaskExecutionSupportedContext,
++			// 		group: '4_tasks',
++			// 		order: 2
++			// 	},
++			// }
+ 		]
+ 	);
+ 
+@@ -576,17 +575,17 @@ export function setupTerminalMenus(): vo
+ 					order: 1
+ 				}
+ 			},
+-			{
+-				id: MenuId.TerminalInlineTabContext,
+-				item: {
+-					command: {
+-						id: TerminalCommandId.MoveToEditor,
+-						title: terminalStrings.moveToEditor.value
+-					},
+-					group: ContextMenuGroup.Create,
+-					order: 2
+-				}
+-			},
++			// {
++			// 	id: MenuId.TerminalInlineTabContext,
++			// 	item: {
++			// 		command: {
++			// 			id: TerminalCommandId.MoveToEditor,
++			// 			title: terminalStrings.moveToEditor.value
++			// 		},
++			// 		group: ContextMenuGroup.Create,
++			// 		order: 2
++			// 	}
++			// },
+ 			{
+ 				id: MenuId.TerminalInlineTabContext,
+ 				item: {
+@@ -627,16 +626,16 @@ export function setupTerminalMenus(): vo
+ 					group: ContextMenuGroup.Edit
+ 				}
+ 			},
+-			{
+-				id: MenuId.TerminalInlineTabContext,
+-				item: {
+-					command: {
+-						id: TerminalCommandId.Kill,
+-						title: terminalStrings.kill.value
+-					},
+-					group: ContextMenuGroup.Kill
+-				}
+-			}
++			// {
++			// 	id: MenuId.TerminalInlineTabContext,
++			// 	item: {
++			// 		command: {
++			// 			id: TerminalCommandId.Kill,
++			// 			title: terminalStrings.kill.value
++			// 		},
++			// 		group: ContextMenuGroup.Kill
++			// 	}
++			// }
+ 		]
+ 	);
+ 
