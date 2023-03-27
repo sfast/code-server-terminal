@@ -7,7 +7,7 @@ Index: code-server/lib/vscode/src/vs/base/browser/ui/actionbar/actionbar.ts
  			}
  
 +			// @ts-ignore
-+			if (item?.label?.className?.includes('trash')) {
++			if (item?._action?.class?.includes('trash')) {
 +				return;
 +			}
 +
